@@ -1,16 +1,19 @@
 
 package org.apache.spark.deploy.control
 
+import scala.collection.mutable.ListBuffer
+
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.StageInfo
+
 import spray.json.JsValue
 
-import scala.collection.mutable.ListBuffer
 
-/**
-  * Created by Simone Ripamonti on 13/05/2017.
-  */
+
+/*
+ * Created by Simone Ripamonti on 13/05/2017.
+ */
 abstract class HeuristicBase(conf: SparkConf) extends Logging{
 
   var NOMINAL_RATE_RECORD_S: Double = conf.getDouble("spark.control.nominalrate", 1000.0)
@@ -23,7 +26,8 @@ abstract class HeuristicBase(conf: SparkConf) extends Logging{
                    stageId : Int,
                    last: Boolean) : (Double, Double, Double)
 
-  def computeCoreForExecutors(coresToBeAllocated: Double, stageId: Int, last: Boolean): IndexedSeq[Double]
+  def computeCoreForExecutors(coresToBeAllocated: Double,
+                              stageId: Int, last: Boolean): IndexedSeq[Double]
 
   def computeTaskForExecutors(coresToBeAllocated: Double,
                               totalTasksStage: Int,
@@ -31,7 +35,7 @@ abstract class HeuristicBase(conf: SparkConf) extends Logging{
     numExecutor = numMaxExecutor
     var remainingTasks = totalTasksStage.toInt
     var z = numExecutor
-    var taskPerExecutor = new ListBuffer[Int]()
+    val taskPerExecutor = new ListBuffer[Int]()
     while (remainingTasks > 0 && z > 0) {
       val a = math.floor(remainingTasks / z).toInt
       remainingTasks -= a
@@ -64,7 +68,10 @@ abstract class HeuristicBase(conf: SparkConf) extends Logging{
                                       firstStage: Boolean = false
                                       ): Long
 
-  def computeCoreStage(deadlineStage: Long = 0L, numRecord: Long = 0L, stageId : Int, firstStage : Boolean = false, lastStage: Boolean = false): Double
+  def computeCoreStage(deadlineStage: Long = 0L,
+                       numRecord: Long = 0L,
+                       stageId : Int,
+                       firstStage : Boolean = false, lastStage: Boolean = false): Double
 
   def computeNominalRecord(stage: StageInfo, duration: Long, recordsRead: Double): Unit = {
     // val duration = (stage.completionTime.get - stage.submissionTime.get) / 1000.0

@@ -46,7 +46,6 @@ import org.apache.spark.scheduler.{SparkListener, SparkListenerExecutorAdded, Sp
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.{KillTask, LaunchTask}
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.util.{SerializableBuffer, ThreadUtils, Utils}
-
 class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
     with LocalSparkContext with MockitoSugar {
 
@@ -335,6 +334,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
       doAnswer(_ => getFakeTaskRunner(taskDescription))
         .when(executor).createTaskRunner(any(), any())
 
+
       // Launch a new task shall add an entry to `taskResources` map.
       backend.self.send(LaunchTask(new SerializableBuffer(serializedTaskDescription)))
       eventually(timeout(10.seconds)) {
@@ -452,7 +452,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
       // Launch tasks and quickly kill them so that TaskRunner.killTask will be triggered.
       taskDescriptions.foreach { taskDescription =>
         val buffer = new SerializableBuffer(TaskDescription.encode(taskDescription))
-        backend.self.send(LaunchTask(buffer))
+        backend.self.send(LaunchTask( buffer))
         Thread.sleep(1)
         backend.self.send(KillTask(taskDescription.taskId, "exec1", false, "test"))
       }

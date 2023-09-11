@@ -58,6 +58,8 @@ object GraphGenerators extends Logging {
       sc: SparkContext, numVertices: Int, numEParts: Int = 0, mu: Double = 4.0,
       sigma: Double = 1.3, seed: Long = -1): Graph[Long, Int] = {
 
+    logInfo("[GRAPH CREATION] V: %d MU: %d".format(numVertices, mu))
+
     val evalNumEParts = if (numEParts == 0) sc.defaultParallelism else numEParts
 
     // Enable deterministic seeding
@@ -101,6 +103,10 @@ object GraphGenerators extends Logging {
       mu: Double, sigma: Double, maxVal: Int, seed: Long = -1): Int = {
     val rand = if (seed == -1) new Random() else new Random(seed)
 
+    val sigmaSq = sigma * sigma
+    val m = math.exp(mu + sigmaSq / 2.0)
+    // expm1 is exp(m)-1 with better accuracy for tiny m
+    val s = math.sqrt(math.expm1(sigmaSq) * math.exp(2*mu + sigmaSq))
     // Z ~ N(0, 1)
     var X: Double = maxVal
 

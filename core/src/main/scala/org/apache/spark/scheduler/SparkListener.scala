@@ -17,19 +17,17 @@
 
 package org.apache.spark.scheduler
 
-import java.util.Properties
-import javax.annotation.Nullable
-
-import scala.collection.Map
-
 import com.fasterxml.jackson.annotation.JsonTypeInfo
-
 import org.apache.spark.TaskEndReason
 import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.storage.{BlockManagerId, BlockUpdatedInfo}
+
+import java.util.Properties
+import javax.annotation.Nullable
+import scala.collection.Map
 
 @DeveloperApi
 @JsonTypeInfo(use = JsonTypeInfo.Id.CLASS, include = JsonTypeInfo.As.PROPERTY, property = "Event")
@@ -493,6 +491,11 @@ private[spark] trait SparkListenerInterface {
    */
   def onBlockUpdated(blockUpdated: SparkListenerBlockUpdated): Unit
 
+  def onExecutorAssigned
+  (sparkListenerExecutorAssigned: SparkListenerExecutorAssigned) {}
+
+  def onStageWeightSubmitted
+  (stageWeightSubmitted: SparkStageWeightSubmitted) {}
   /**
    * Called when a speculative task is submitted
    */

@@ -17,13 +17,12 @@
 
 package org.apache.spark.deploy.worker
 
+import org.apache.spark.deploy.Command
+import org.apache.spark.util.Utils
+import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.scalatest.PrivateMethodTester
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
-
-import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
-import org.apache.spark.deploy.Command
-import org.apache.spark.util.Utils
 
 class CommandUtilsSuite extends SparkFunSuite with Matchers with PrivateMethodTester {
 
@@ -32,7 +31,7 @@ class CommandUtilsSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     val sparkHome = sys.props.getOrElse("spark.test.home", fail("spark.test.home is not set!"))
     val cmd = new Command("mainClass", Seq(), Map(), Seq(), Seq("libraryPathToB"), Seq())
     val builder = CommandUtils.buildProcessBuilder(
-      cmd, new SecurityManager(new SparkConf), 512, sparkHome, t => t)
+      cmd, new SecurityManager(new SparkConf), 512,  sparkHome, t => t)
     val libraryPath = Utils.libraryPathEnvName
     val env = builder.environment
     env.keySet should contain(libraryPath)

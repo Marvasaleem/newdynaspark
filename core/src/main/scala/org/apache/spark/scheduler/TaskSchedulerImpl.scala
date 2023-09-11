@@ -133,6 +133,9 @@ private[spark] class TaskSchedulerImpl(
   // Protected by `this`
   val taskIdToExecutorId = new HashMap[Long, String]
 
+  val execIdToTaskSet = new HashMap[String, Long].withDefaultValue(-1)
+  val taskSetToExecId = new HashMap[Long, Set[String]].withDefaultValue(Set())
+
   @volatile private var hasReceivedTask = false
   @volatile private var hasLaunchedTask = false
   private val starvationTimer = new Timer("task-starvation-timer", true)
@@ -980,6 +983,20 @@ private[spark] class TaskSchedulerImpl(
         // It might be good to do something smarter here in the future.
         throw SparkCoreErrors.clusterSchedulerError(message)
       }
+    }
+  }
+
+  def bind(executorId: String, stageId: Int): Unit = {
+    if (execIdToTaskSet(executorId) == -1) {
+      logInfo("BINDING EXECUTOR ID: %s TO STAGEID %d".format(executorId, stageId))
+      execIdToTaskSet(executorId) = stageId
+    }
+  }
+
+  def unbind(executorId: String, stageId: Int): Unit = {
+    if (execIdToTaskSet(executorId) == stageId) {
+      logInfo("UNBINDING EXECUTOR ID: %s FROM SID: %d".format(executorId, stageId))
+      execIdToTaskSet(executorId) = -1
     }
   }
 

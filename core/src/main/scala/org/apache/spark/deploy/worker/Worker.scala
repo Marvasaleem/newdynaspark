@@ -17,6 +17,7 @@
 
 package org.apache.spark.deploy.worker
 
+import sys.process._
 import java.io.{File, IOException}
 import java.text.SimpleDateFormat
 import java.util.{Date, Locale, UUID}
@@ -34,8 +35,7 @@ import org.apache.spark.deploy.ExternalShuffleService
 import org.apache.spark.deploy.StandaloneResourceUtils._
 import org.apache.spark.deploy.master.{DriverState, Master}
 import org.apache.spark.deploy.worker.ui.WorkerWebUI
-
-import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.{Logging, config}
 import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.internal.config.Worker._
@@ -511,7 +511,9 @@ private[deploy] class Worker(
       handleRegisterResponse(msg)
 
     case SendHeartbeat =>
-      if (connected) { sendToMaster(Heartbeat(workerId, self)) }
+      if (connected) {
+        sendToMaster(Heartbeat(workerId, self))
+      }
 
     case WorkDirCleanup =>
       // Spin up a separate thread (in a future) to do the dir cleanup; don't tie up worker
@@ -540,7 +542,7 @@ private[deploy] class Worker(
             // if an application is stopped while the external shuffle service is down?
             // So then it'll leave an entry in the DB and the entry should be removed.
             if (conf.get(config.SHUFFLE_SERVICE_DB_ENABLED) &&
-                conf.get(config.SHUFFLE_SERVICE_ENABLED)) {
+              conf.get(config.SHUFFLE_SERVICE_ENABLED)) {
               shuffleService.applicationRemoved(dir.getName)
             }
           }
@@ -563,7 +565,8 @@ private[deploy] class Worker(
           e.appId, e.execId, e.rpId, e.cores, e.memory, e.state), e.resources)
       }
       val driverResponses = drivers.keys.map { id =>
-        WorkerDriverStateResponse(id, drivers(id).resources)}
+        WorkerDriverStateResponse(id, drivers(id).resources)
+      }
       masterRef.send(WorkerSchedulerStateResponse(
         workerId, executorResponses.toList, driverResponses.toSeq))
 
@@ -619,7 +622,7 @@ private[deploy] class Worker(
           logInfo("PROXY ADDRESS:" + controllerProxy.getAddress)
           // scalastyle:off line.size.limit
           val appDescProxed = appDesc.copy(command =
-          Worker.changeDriverToProxy(appDesc.command, execIdToProxy(execId.toString).getAddress))
+            Worker.changeDriverToProxy(appDesc.command, execIdToProxy(execId.toString).getAddress))
           logInfo(appDescProxed.command.toString)
           val manager = new ExecutorRunner(
             appId,
@@ -639,7 +642,10 @@ private[deploy] class Worker(
             executorDir,
             workerUri,
             conf,
-            appLocalDirs, ExecutorState.RUNNING)
+            appLocalDirs,
+            ExecutorState.LAUNCHING,
+            rpId,
+            resources_)
           executors(appId + "/" + execId) = manager
           manager.start()
           coresUsed += cores_
@@ -673,6 +679,8 @@ private[deploy] class Worker(
           case Some(executor) =>
             logInfo("Asked to kill executor " + fullId)
             executor.kill()
+            execIdToProxy(execId.toString).stop()
+            execIdToProxy.remove(execId.toString)
           case None =>
             logInfo("Asked to kill unknown executor " + fullId)
         }
@@ -707,7 +715,7 @@ private[deploy] class Worker(
           logError(s"Asked to kill unknown driver $driverId")
       }
 
-    case driverStateChanged @ DriverStateChanged(driverId, state, exception) =>
+    case driverStateChanged@DriverStateChanged(driverId, state, exception) =>
       handleDriverStateChanged(driverStateChanged)
 
     case ReregisterWithMaster =>
@@ -716,6 +724,7 @@ private[deploy] class Worker(
     case ApplicationFinished(id) =>
       finishedApps += id
       maybeCleanupApplication(id)
+
 
     case InitControllerExecutor
       (executorId, stageId, coreMin, coreMax, tasks, deadline, core) =>
@@ -769,7 +778,6 @@ private[deploy] class Worker(
         logError(s"Failed to scale executor $appId/$execId ", e)
         if (executors.contains(appId + "/" + execId)) {
           executors(appId + "/" + execId).kill()
-          val exitCode = Seq("docker", "stop", appId + "." + execId).!
           executors -= appId + "/" + execId
           coresAllocated -= appId + "/" + execId
         }
@@ -777,15 +785,15 @@ private[deploy] class Worker(
           Some(e.toString), None))
     }
 
+  }
 
-    def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
-      case RequestWorkerState =>
-        context.reply(WorkerStateResponse(host, port, workerId, executors.values.toList,
-          finishedExecutors.values.toList, drivers.values.toList,
-          finishedDrivers.values.toList, activeMasterUrl, cores, memory,
-          coresUsed, memoryUsed, activeMasterWebUiUrl, resources,
-          resourcesUsed.toMap.map { case (k, v) => (k, v.toResourceInformation) }))
-    }
+  override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
+    case RequestWorkerState =>
+      context.reply(WorkerStateResponse(host, port, workerId, executors.values.toList,
+        finishedExecutors.values.toList, drivers.values.toList,
+        finishedDrivers.values.toList, activeMasterUrl, cores, memory,
+        coresUsed, memoryUsed, activeMasterWebUiUrl, resources,
+        resourcesUsed.toMap.map { case (k, v) => (k, v.toResourceInformation)}))
   }
 
   override def onDisconnected(remoteAddress: RpcAddress): Unit = {
@@ -977,6 +985,7 @@ private[deploy] class Worker(
           trimFinishedExecutorsIfNecessary()
           coresUsed -= executor.cores
           memoryUsed -= executor.memory
+          coresAllocated -= fullId
           removeResourcesUsed(executor.resources)
 
           if (CLEANUP_FILES_AFTER_EXECUTOR_EXIT) {
@@ -1061,5 +1070,9 @@ private[deploy] object Worker extends Logging {
     } else {
       cmd
     }
+  }
+
+  def changeDriverToProxy(cmd: Command, proxyUrl: String): Command = {
+    cmd.copy(arguments = cmd.arguments.updated(1, proxyUrl))
   }
 }

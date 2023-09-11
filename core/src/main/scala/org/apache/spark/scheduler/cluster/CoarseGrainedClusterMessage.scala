@@ -25,12 +25,11 @@ import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.scheduler.{ExecutorLossReason, MiscellaneousProcessDetails}
 import org.apache.spark.util.SerializableBuffer
 
+
 private[spark] sealed trait CoarseGrainedClusterMessage extends Serializable
 
 private[spark] object CoarseGrainedClusterMessages {
-
   case object RetrieveSparkProps extends CoarseGrainedClusterMessage
-  case class RetrieveSparkAppConfig(resourceProfileId: Int) extends CoarseGrainedClusterMessage
 
   case class Bind(executorId: String, stageId: Int) extends CoarseGrainedClusterMessage
 
@@ -49,28 +48,31 @@ private[spark] object CoarseGrainedClusterMessages {
   case class InitControllerExecutor
   (executorId: String, stageId: Long,
    coreMin: Double, coreMax: Double, tasks: Int, deadline: Long, core: Double)
-  extends CoarseGrainedClusterMessage
+    extends CoarseGrainedClusterMessage
 
   // ControllerJob to Master
   case class NeededCoreForExecutors
   (stageId: Long, coreForExecutors: IndexedSeq[Double], driverUrl: String)
-  extends CoarseGrainedClusterMessage
+    extends CoarseGrainedClusterMessage
+
 
   // Proxy to driver
   case class ExecutorFinishedTask(executorId: String,
                                   stageId: Int) extends CoarseGrainedClusterMessage
+
+  case class RetrieveSparkAppConfig(resourceProfileId: Int) extends CoarseGrainedClusterMessage
+
   case class SparkAppConfig(
       sparkProperties: Seq[(String, String)],
       ioEncryptionKey: Option[Array[Byte]],
       hadoopDelegationCreds: Option[Array[Byte]],
-      resourceProfile: ResourceProfile,
-      logLevel: Option[String])
+      resourceProfile: ResourceProfile)
     extends CoarseGrainedClusterMessage
 
   case object RetrieveLastAllocatedExecutorId extends CoarseGrainedClusterMessage
 
   // Driver to executors
-  case class LaunchTask(data: SerializableBuffer) extends CoarseGrainedClusterMessage
+  case class LaunchTask(taskId:Long, data: SerializableBuffer) extends CoarseGrainedClusterMessage
 
   case class KillTask(taskId: Long, executor: String, interruptThread: Boolean, reason: String)
     extends CoarseGrainedClusterMessage

@@ -160,7 +160,7 @@ private[deploy] class ExecutorRunner(
       }
       val subsCommand = appDesc.command.copy(arguments = arguments, javaOpts = subsOpts)
       val builder = CommandUtils.buildProcessBuilder(subsCommand, new SecurityManager(conf),
-        memory, sparkHome.getAbsolutePath, substituteVariables)
+        memory, cpuperiod, cpuquota, sparkHome.getAbsolutePath, substituteVariables)
       val command = builder.command()
       val redactedCommand = Utils.redactCommandLineArgs(conf, command.asScala.toSeq)
         .mkString("\"", "\" \"", "\"")

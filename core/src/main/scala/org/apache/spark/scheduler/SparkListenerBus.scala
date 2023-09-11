@@ -95,6 +95,10 @@ private[spark] trait SparkListenerBus
         listener.onUnschedulableTaskSetAdded(unschedulableTaskSetAdded)
       case unschedulableTaskSetRemoved: SparkListenerUnschedulableTaskSetRemoved =>
         listener.onUnschedulableTaskSetRemoved(unschedulableTaskSetRemoved)
+      case executorAssigned: SparkListenerExecutorAssigned =>
+        listener.onExecutorAssigned(executorAssigned)
+      case stageWeightSubmitted: SparkStageWeightSubmitted =>
+        listener.onStageWeightSubmitted(stageWeightSubmitted)
       case resourceProfileAdded: SparkListenerResourceProfileAdded =>
         listener.onResourceProfileAdded(resourceProfileAdded)
       case _ => listener.onOtherEvent(event)

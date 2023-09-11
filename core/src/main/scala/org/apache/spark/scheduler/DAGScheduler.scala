@@ -51,13 +51,14 @@ import org.apache.spark.rpc.RpcTimeout
 import org.apache.spark.storage._
 import org.apache.spark.storage.BlockManagerMessages.BlockManagerHeartbeat
 import org.apache.spark.util._
+import org.apache.spark.deploy.control._
+
 import spray.json._
-import DefaultJsonProtocol._
 
 import scala.io
 import java.nio.file.{Files, Paths}
 
-import org.apache.spark.deploy.control._
+
 
 
 /**
@@ -187,7 +188,9 @@ private[spark] class DAGScheduler(
 
   val heuristicType = sc.conf.getInt("spark.control.heuristic", 0)
   val heuristic: HeuristicBase =
-    if (heuristicType == 1 && sc.conf.contains("spark.control.stagecores") && sc.conf.contains("spark.control.stagedeadlines") && sc.conf.contains("spark.control.stage"))
+    if (heuristicType == 1 && sc.conf.contains("" +
+      "spark.control.stagecores") && sc.conf.contains("" +
+      "spark.control.stagedeadlines") && sc.conf.contains("spark.control.stage"))
       new HeuristicFixed(sc.conf)
     else if (heuristicType == 2)
       new HeuristicControlUnlimited(sc.conf)

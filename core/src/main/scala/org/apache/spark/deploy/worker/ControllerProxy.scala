@@ -17,18 +17,18 @@
 
 package org.apache.spark.deploy.worker
 
-import org.apache.spark.{SecurityManager, SparkConf, TaskState}
 import org.apache.spark.internal.Logging
 import org.apache.spark.rpc._
-import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.{RegisteredExecutor, _}
-import org.apache.spark.util.{ThreadUtils, Utils}
+import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
+import org.apache.spark.util.{SerializableBuffer, ThreadUtils}
+import org.apache.spark.{SecurityManager, SparkConf, TaskState}
 
 import scala.collection.mutable.HashMap
 import scala.util.{Failure, Success}
 
-/*
- * Created by Matteo on 21/07/2016.
- */
+ /*
+  * Created by Matteo on 21/07/2016.
+  */
 class ControllerProxy
 (rpcEnvWorker: RpcEnv, val driverUrl: String, val execId: Int) {
 
@@ -84,7 +84,7 @@ class ControllerProxy
     }
 
     override def receive: PartialFunction[Any, Unit] = {
-      case StatusUpdate(executorId, taskId, state, data) =>
+      case StatusUpdate(executorId, taskId, state, data, taskCpus, resources) =>
         if (state == TaskState.FINISHED) {
           if (controllerExecutor != null) controllerExecutor.completedTasks += 1
           taskCompleted += 1
@@ -104,7 +104,7 @@ class ControllerProxy
           taskFailed += 1
           driver.get.send(Bind(execId.toString, executorStageId))
         }
-        driver.get.send(StatusUpdate(executorId, taskId, state, data))
+        driver.get.send(StatusUpdate(executorId, taskId, state, data, taskCpus, resources))
 
       case RegisteredExecutor =>
         logInfo("Already Registered Before ACK also driver knows about executor")
@@ -113,10 +113,10 @@ class ControllerProxy
         executorRefMap(
           executorIdToAddress(execId.toString).host).send(RegisterExecutorFailed(message))
 
-      case LaunchTask(taskId, data) =>
+      case LaunchTask(taskId, data: SerializableBuffer) =>
         if (taskLaunched == totalTask && taskFailed == 0) {
           logInfo("Killed TID " + taskId.toString + " EID " + execId.toString)
-          driver.get.send(StatusUpdate(execId.toString, taskId, TaskState.KILLED, data))
+          driver.get.send(StatusUpdate(execId.toString, taskId, TaskState.KILLED, data, totalTask))
         } else {
           executorRefMap(executorIdToAddress(execId.toString).host).send(LaunchTask(taskId, data))
           taskLaunched += 1
@@ -161,13 +161,15 @@ class ControllerProxy
     }
 
     override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
-      case RegisterExecutor(executorId, executorRef, hostPort, cores, logUrls) =>
+      case RegisterExecutor(executorId, executorRef,
+      hostPort, cores, logUrls, attributes, resources, resourceProfileId ) =>
         logInfo("Connecting to driver: " + driverUrl)
         rpcEnv.asyncSetupEndpointRefByURI(driverUrl).flatMap { ref =>
           // This is a very fast action so we can use "ThreadUtils.sameThread"
           driver = Some(ref)
           logInfo(ref.address.toString)
-          ref.ask[Boolean](RegisterExecutor(executorId, self, hostPort, cores, logUrls))
+          ref.ask[Boolean](RegisterExecutor(executorId,
+            self, hostPort, cores, logUrls, attributes, resources, resourceProfileId))
         }(ThreadUtils.sameThread).onComplete {
           // This is a very fast action so we can use "ThreadUtils.sameThread"
           case Success(msg) =>

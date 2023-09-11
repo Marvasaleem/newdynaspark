@@ -46,25 +46,23 @@ object GraphLoader extends Logging {
    * 2    7
    * 1    8
    * }}}
-   *
-   * @param sc SparkContext
-   * @param path the path to the file (e.g., /home/data/file or hdfs://file)
+   * @param sc                   SparkContext
+   * @param path                 the path to the file (e.g., /home/data/file or hdfs://file)
    * @param canonicalOrientation whether to orient edges in the positive
-   *        direction
-   * @param numEdgePartitions the number of partitions for the edge RDD
-   * Setting this value to -1 will use the default parallelism.
-   * @param edgeStorageLevel the desired storage level for the edge partitions
-   * @param vertexStorageLevel the desired storage level for the vertex partitions
+   *                             direction
+   * @param numEdgePartitions    the number of partitions for the edge RDD
+   *                             Setting this value to -1 will use the default parallelism.
+   * @param edgeStorageLevel     the desired storage level for the edge partitions
+   * @param vertexStorageLevel   the desired storage level for the vertex partitions
    */
   def edgeListFile(
-      sc: SparkContext,
-      path: String,
-      canonicalOrientation: Boolean = false,
-      numEdgePartitions: Int = -1,
-      edgeStorageLevel: StorageLevel = StorageLevel.MEMORY_ONLY,
-      vertexStorageLevel: StorageLevel = StorageLevel.MEMORY_ONLY)
-    : Graph[Int, Int] =
-  {
+                    sc: SparkContext,
+                    path: String,
+                    canonicalOrientation: Boolean = false,
+                    numEdgePartitions: Int = -1,
+                    edgeStorageLevel: StorageLevel = StorageLevel.MEMORY_ONLY,
+                    vertexStorageLevel: StorageLevel = StorageLevel.MEMORY_ONLY)
+  : Graph[Int, Int] = {
     val startTimeNs = System.nanoTime()
 
     // Parse the edge data table directly into edge partitions
@@ -93,13 +91,20 @@ object GraphLoader extends Logging {
       }
       Iterator((pid, builder.toEdgePartition))
     }.persist(edgeStorageLevel).setName("GraphLoader.edgeListFile - edges (%s)".format(path))
+
     edges.count()
 
     logInfo(s"It took ${TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startTimeNs)} ms" +
       " to load the edges")
 
-    GraphImpl.fromEdgePartitions(edges, defaultVertexAttr = 1, edgeStorageLevel = edgeStorageLevel,
+    val graph = GraphImpl.fromEdgePartitions(edges, defaultVertexAttr = 1, edgeStorageLevel = edgeStorageLevel,
       vertexStorageLevel = vertexStorageLevel)
-  } // end of edgeListFile
 
+   // val totalV = graph.vertices.count()
+    //val totalE = graph.edges.count()
+
+    //logInfo("[GRAPH CREATION] Created %d vertices and %d edges".format(totalV, totalE))
+
+    graph
+  } // end of edgeListFile
 }

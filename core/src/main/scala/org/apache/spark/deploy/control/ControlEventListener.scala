@@ -17,17 +17,14 @@
 
 package org.apache.spark.deploy.control
 
-import scala.collection.mutable.{HashMap, HashSet, ListBuffer}
+import scala.collection.mutable.{HashMap, HashSet}
 
 import org.apache.spark._
-import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.ui.jobs.JobProgressListener
 import org.apache.spark.ui.jobs.UIData._
-
-
 /*
  *
  * Created by Matteo on 20/07/2016.
@@ -79,13 +76,15 @@ class ControlEventListener(conf: SparkConf) extends JobProgressListener(conf) wi
 
   val heuristicType = conf.getInt("spark.control.heuristic", 0)
   val heuristic: HeuristicBase =
-    if (heuristicType == 1 && conf.contains("spark.control.stagecores") && conf.contains("spark.control.stagedeadlines") && conf.contains("spark.control.stage"))
+    if (heuristicType == 1 && conf.contains("" +
+      "spark.control.stagecores") && conf.contains("" +
+      "spark.control.stagedeadlines") && conf.contains("" +
+      "spark.control.stage"))
       new HeuristicFixed(conf)
     else if (heuristicType == 2)
       new HeuristicControlUnlimited(conf)
     else
       new HeuristicControl(conf)
-
 
   override def onJobStart(jobStart: SparkListenerJobStart): Unit = synchronized {
     val jobGroup = for (
@@ -249,12 +248,14 @@ class ControlEventListener(conf: SparkConf) extends JobProgressListener(conf) wi
       stageIdToDeadline(stageId) = newDeadline
       val numRecord = stageIdToNumRecords.getOrElse(stageId, 0)
       if (numRecord != 0) {
-        stageIdToCore(stageId) = heuristic.computeCoreStage(newDeadline, numRecord.asInstanceOf[Number].longValue, stageId)
+        stageIdToCore(stageId) = heuristic.computeCoreStage(newDeadline,
+          numRecord.asInstanceOf[Number].longValue, stageId)
       } else {
         stageIdToCore(stageId) = heuristic.computeCoreStage(stageId = stageId, firstStage = true)
       }
       if (stageId == lastStageId) {
-        stageIdToCore(stageId) = heuristic.computeCoreStage(newDeadline, numRecord.asInstanceOf[Number].longValue, stageId = stageId, lastStage = true)
+        stageIdToCore(stageId) = heuristic.computeCoreStage(newDeadline,
+          numRecord.asInstanceOf[Number].longValue, stageId = stageId, lastStage = true)
       }
       val stageExecNeeded = heuristic.computeCoreForExecutors(stageIdToCore(stageId),
         stageId,
@@ -302,9 +303,11 @@ class ControlEventListener(conf: SparkConf) extends JobProgressListener(conf) wi
         firstStage = true)
 
       if (completedStages.nonEmpty) {
-        stageIdToCore(stage.stageId) = heuristic.computeCoreStage(stageId = completedStages.toList.head.stageId, firstStage = true)
+        stageIdToCore(stage.stageId) = heuristic.computeCoreStage(stageId = completedStages.toList.head.stageId,
+          firstStage = true)
       } else {
-        stageIdToCore(stage.stageId) = heuristic.computeCoreStage(stageId = stage.stageId, firstStage = true)
+        stageIdToCore(stage.stageId) = heuristic.computeCoreStage(stageId = stage.stageId,
+          firstStage = true)
       }
 
       jobIdToController(jobId.head) = controller
@@ -349,13 +352,16 @@ class ControlEventListener(conf: SparkConf) extends JobProgressListener(conf) wi
 
           } else {
             logError("STAGEID: " + stage.stageId + " NUM RECORD == 0")
-            stageIdToCore(stage.stageId) = heuristic.computeCoreStage(stageId = stage.stageId, firstStage = true)
+            stageIdToCore(stage.stageId) = heuristic.computeCoreStage(stageId = stage.stageId,
+              firstStage = true)
           }
         } else {
-          stageIdToCore(stage.stageId) = heuristic.computeCoreStage(deadlineStage, numRecord, stage.stageId)
+          stageIdToCore(stage.stageId) = heuristic.computeCoreStage(deadlineStage,
+            numRecord, stage.stageId)
         }
       } else {
-        stageIdToCore(stage.stageId) = heuristic.computeCoreStage(stageId = stage.stageId, firstStage = true)
+        stageIdToCore(stage.stageId) = heuristic.computeCoreStage(stageId = stage.stageId,
+          firstStage = true)
         stageIdsToComputeNominalRecord.add(stage.stageId)
       }
       val lastStage = stage.stageId == lastStageId
@@ -544,8 +550,10 @@ class ControlEventListener(conf: SparkConf) extends JobProgressListener(conf) wi
     val lastStage = stageId == lastStageId
     if (stageId != firstStageId && !stageIdsToComputeNominalRecord.contains(stageId)) {
 
-      val taskForExecutorId = heuristic.computeTaskForExecutors(stageIdToCore(stageId), stageIdToInfo(stageId).numTasks, lastStage)(index)
-      val (coreMin, coreMax, coreToStart) = heuristic.computeCores(stageIdToCore(stageId), index, stageId, lastStage)
+      val taskForExecutorId = heuristic.computeTaskForExecutors(stageIdToCore(stageId),
+        stageIdToInfo(stageId).numTasks, lastStage)(index)
+      val (coreMin, coreMax, coreToStart) = heuristic.computeCores(stageIdToCore(stageId),
+        index, stageId, lastStage)
 
       controller.scaleExecutor(workerUrl, appid, executorAssigned.executorId, coreToStart)
       controller.initControllerExecutor(

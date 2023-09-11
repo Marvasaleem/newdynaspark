@@ -53,7 +53,6 @@ private[spark] class CoarseGrainedExecutorBackend(
     bindAddress: String,
     hostname: String,
     cores: Int,
-    appId: String,
     env: SparkEnv,
     resourcesFileOpt: Option[String],
     resourceProfile: ResourceProfile)
@@ -178,10 +177,8 @@ private[spark] class CoarseGrainedExecutorBackend(
         case NonFatal(e) =>
           exitExecutor(1, "Unable to create executor due to " + e.getMessage, e)
       }
-    case UpdateExecutorLogLevel(newLogLevel) =>
-      Utils.setLogLevelIfNeeded(newLogLevel)
 
-    case LaunchTask(data) =>
+    case LaunchTask(taskId, data) =>
       if (executor == null) {
         exitExecutor(1, "Received LaunchTask command but executor was null")
       } else {
@@ -457,7 +454,8 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       }
 
       val cfg = driver.askSync[SparkAppConfig](RetrieveSparkAppConfig(arguments.resourceProfileId))
-
+      val props = cfg.sparkProperties ++ Seq[(String, String)](("spark.app.id", arguments.appId))
+      fetcher.shutdown()
 
       // Create SparkEnv using properties we fetched from the driver.
       val driverConf = new SparkConf()
@@ -475,8 +473,6 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       }
 
       driverConf.set(EXECUTOR_ID, arguments.executorId)
-      cfg.logLevel.foreach(logLevel => Utils.setLogLevelIfNeeded(logLevel))
-
       val env = SparkEnv.createExecutorEnv(driverConf, arguments.executorId, arguments.bindAddress,
         arguments.hostname, arguments.cores, cfg.ioEncryptionKey, isLocal = false)
       // Set the application attemptId in the BlockStoreClient if available.
@@ -522,9 +518,6 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
           argv = tail
         case ("--cores") :: value :: tail =>
           cores = value.toInt
-          argv = tail
-        case ("--app-id") :: value :: tail =>
-          appId = value
           argv = tail
         case ("--resourcesFile") :: value :: tail =>
           resourcesFileOpt = Some(value)
