@@ -509,6 +509,13 @@
       <artifactId>protobuf-java</artifactId>
       <scope>compile</scope>
     </dependency>
+
+    <dependency>
+      <groupId>io.spray</groupId>
+      <artifactId>spray-json_2.12</artifactId>
+      <version>1.3.6</version>
+    </dependency>
+
   </dependencies>
   <build>
     <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
