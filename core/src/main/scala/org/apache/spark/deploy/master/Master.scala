@@ -39,6 +39,7 @@ import org.apache.spark.internal.config.Worker._
 import org.apache.spark.metrics.{MetricsSystem, MetricsSystemInstances}
 import org.apache.spark.resource.{ResourceProfile, ResourceRequirement, ResourceUtils}
 import org.apache.spark.rpc._
+import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.{ScaleExecutor, ExecutorScaled}
 import org.apache.spark.serializer.{JavaSerializer, Serializer}
 import org.apache.spark.util.{SparkUncaughtExceptionHandler, ThreadUtils, Utils}
 
@@ -874,6 +875,14 @@ private[deploy] class Master(
       exec.rpId, exec.application.desc, exec.cores, exec.memory, exec.resources))
     exec.application.driver.send(
       ExecutorAdded(exec.id, worker.id, worker.hostPort, exec.cores, exec.memory))
+  }
+
+  private def scaleExecutor(worker: WorkerInfo, exec: ExecutorDesc): Unit = {
+    logInfo("Scaling executor " + exec.fullId + " on worker " + worker.id)
+    worker.scaleExecutor(exec)
+    worker.endpoint.send(ScaleExecutor(exec.application.id, exec.id.toString, exec.cores.toDouble))
+    exec.application.driver.send(ExecutorScaled(System.currentTimeMillis(),
+      exec.id.toString, exec.cores, exec.cores))
   }
 
   private def registerWorker(worker: WorkerInfo): Boolean = {

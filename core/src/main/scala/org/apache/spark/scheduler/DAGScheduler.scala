@@ -51,6 +51,14 @@ import org.apache.spark.rpc.RpcTimeout
 import org.apache.spark.storage._
 import org.apache.spark.storage.BlockManagerMessages.BlockManagerHeartbeat
 import org.apache.spark.util._
+import spray.json._
+import DefaultJsonProtocol._
+
+import scala.io
+import java.nio.file.{Files, Paths}
+
+import org.apache.spark.deploy.control._
+
 
 /**
  * The high-level scheduling layer that implements stage-oriented scheduling. It computes a DAG of
@@ -167,6 +175,24 @@ private[spark] class DAGScheduler(
   private[scheduler] val failedStages = new HashSet[Stage]
 
   private[scheduler] val activeJobs = new HashSet[ActiveJob]
+
+  val stageIdToWeight = new HashMap[Int, Int]
+
+  val jsonFile = sys.env.getOrElse("SPARK_HOME", ".") + "/conf/" +
+    sc.appName.replaceAll("[^a-zA-Z0-9.-]", "_") + ".json"
+
+  val appJson = if (Files.exists(Paths.get(jsonFile))) {
+    io.Source.fromFile(jsonFile).mkString.parseJson
+  } else null
+
+  val heuristicType = sc.conf.getInt("spark.control.heuristic", 0)
+  val heuristic: HeuristicBase =
+    if (heuristicType == 1 && sc.conf.contains("spark.control.stagecores") && sc.conf.contains("spark.control.stagedeadlines") && sc.conf.contains("spark.control.stage"))
+      new HeuristicFixed(sc.conf)
+    else if (heuristicType == 2)
+      new HeuristicControlUnlimited(sc.conf)
+    else
+      new HeuristicControl(sc.conf)
 
   /**
    * Contains the locations that each RDD's partitions are cached on.  This map's keys are RDD ids

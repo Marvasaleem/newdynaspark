@@ -1076,6 +1076,7 @@
         <artifactId>jaxb-api</artifactId>
         <version>2.2.11</version>
       </dependency>
+
       <dependency>
         <groupId>org.scalanlp</groupId>
         <artifactId>breeze_${scala.binary.version}</artifactId>

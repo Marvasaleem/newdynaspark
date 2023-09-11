@@ -46,6 +46,8 @@ private[deploy] class ExecutorRunner(
     val appDesc: ApplicationDescription,
     val cores: Int,
     val memory: Int,
+    val cpuperiod: Long,
+    val cpuquota: Long,
     val worker: RpcEndpointRef,
     val workerId: String,
     val webUiScheme: String,

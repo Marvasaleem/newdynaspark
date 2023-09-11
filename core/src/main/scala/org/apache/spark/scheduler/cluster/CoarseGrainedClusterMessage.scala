@@ -29,8 +29,36 @@ private[spark] sealed trait CoarseGrainedClusterMessage extends Serializable
 
 private[spark] object CoarseGrainedClusterMessages {
 
+  case object RetrieveSparkProps extends CoarseGrainedClusterMessage
   case class RetrieveSparkAppConfig(resourceProfileId: Int) extends CoarseGrainedClusterMessage
 
+  case class Bind(executorId: String, stageId: Int) extends CoarseGrainedClusterMessage
+
+  case class BindWithTasks(executorId: String, stageId: Int, tasks: Int)
+    extends CoarseGrainedClusterMessage
+
+  case class UnBind(executorId: String, stageId: Int) extends CoarseGrainedClusterMessage
+
+  case class ScaleExecutor(appId: String, execId: String, cores: Double)
+    extends CoarseGrainedClusterMessage
+
+  case class ExecutorScaled(timestamp: Long, execId: String, cores: Double, newFreeCores: Int)
+    extends CoarseGrainedClusterMessage
+
+  // ControllerJob to ControllerExecutor (Worker)
+  case class InitControllerExecutor
+  (executorId: String, stageId: Long,
+   coreMin: Double, coreMax: Double, tasks: Int, deadline: Long, core: Double)
+  extends CoarseGrainedClusterMessage
+
+  // ControllerJob to Master
+  case class NeededCoreForExecutors
+  (stageId: Long, coreForExecutors: IndexedSeq[Double], driverUrl: String)
+  extends CoarseGrainedClusterMessage
+
+  // Proxy to driver
+  case class ExecutorFinishedTask(executorId: String,
+                                  stageId: Int) extends CoarseGrainedClusterMessage
   case class SparkAppConfig(
       sparkProperties: Seq[(String, String)],
       ioEncryptionKey: Option[Array[Byte]],
@@ -59,6 +87,13 @@ private[spark] object CoarseGrainedClusterMessages {
 
   case class UpdateDelegationTokens(tokens: Array[Byte])
     extends CoarseGrainedClusterMessage
+
+  sealed trait RegisterExecutorResponse
+
+  case object RegisteredExecutor extends CoarseGrainedClusterMessage with RegisterExecutorResponse
+
+  case class RegisterExecutorFailed(message: String) extends CoarseGrainedClusterMessage
+    with RegisterExecutorResponse
 
   // Executors to driver
   case class RegisterExecutor(

@@ -23,12 +23,10 @@ import java.util.{Date, Locale, UUID}
 import java.util.concurrent._
 import java.util.concurrent.{Future => JFuture, ScheduledFuture => JScheduledFuture}
 import java.util.function.Supplier
-
 import scala.collection.mutable.{HashMap, HashSet, LinkedHashMap}
 import scala.concurrent.ExecutionContext
 import scala.util.{Failure, Random, Success}
 import scala.util.control.NonFatal
-
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.{Command, ExecutorDescription, ExecutorState}
 import org.apache.spark.deploy.DeployMessages._
@@ -36,6 +34,7 @@ import org.apache.spark.deploy.ExternalShuffleService
 import org.apache.spark.deploy.StandaloneResourceUtils._
 import org.apache.spark.deploy.master.{DriverState, Master}
 import org.apache.spark.deploy.worker.ui.WorkerWebUI
+
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.internal.config.UI._
@@ -44,6 +43,7 @@ import org.apache.spark.metrics.{MetricsSystem, MetricsSystemInstances}
 import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.rpc._
+import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.{Bind, BindWithTasks, ExecutorScaled, InitControllerExecutor, ScaleExecutor, UnBind}
 import org.apache.spark.util.{RpcUtils, SignalUtils, SparkUncaughtExceptionHandler, ThreadUtils, Utils}
 
 private[deploy] class Worker(
@@ -159,6 +159,11 @@ private[deploy] class Worker(
   val appDirectories = new HashMap[String, Seq[String]]
   val finishedApps = new HashSet[String]
 
+  val execIdToProxy = new HashMap[String, ControllerProxy]
+  val execIdToAppId = new HashMap[String, String]
+  val executorIdToController = new HashMap[String, ControllerExecutor]
+  val execIdToStageId = new HashMap[String, Int]
+  val CPU_PERIOD = conf.getLong("spark.control.cpuperiod", 100000)
   // Record the consecutive failure attempts of executor state change syncing with Master,
   // so we don't try it endless. We will exit the Worker process at the end if the failure
   // attempts reach the max attempts. In that case, it's highly possible the Worker
@@ -212,6 +217,7 @@ private[deploy] class Worker(
   private[deploy] var resources: Map[String, ResourceInformation] = Map.empty
 
   var coresUsed = 0
+  var coresAllocated: Map[String, List[Int]] = Map()
   var memoryUsed = 0
   val resourcesUsed = new HashMap[String, MutableResourceInfo]()
 
@@ -603,12 +609,26 @@ private[deploy] class Worker(
             dirs
           })
           appDirectories(appId) = appLocalDirs
+
+          val cpuquota = math.ceil(cores * CPU_PERIOD).toLong
+          val driverUrl = appDesc.command.arguments(1)
+          logInfo("CREATING PROXY FOR DRIVER: " + driverUrl)
+          val controllerProxy = new ControllerProxy(rpcEnv, driverUrl, execId)
+          controllerProxy.start()
+          execIdToProxy(execId.toString) = controllerProxy
+          logInfo("PROXY ADDRESS:" + controllerProxy.getAddress)
+          // scalastyle:off line.size.limit
+          val appDescProxed = appDesc.copy(command =
+          Worker.changeDriverToProxy(appDesc.command, execIdToProxy(execId.toString).getAddress))
+          logInfo(appDescProxed.command.toString)
           val manager = new ExecutorRunner(
             appId,
             execId,
             appDesc.copy(command = Worker.maybeUpdateSSLSettings(appDesc.command, conf)),
             cores_,
             memory_,
+            CPU_PERIOD,
+            cpuquota,
             self,
             workerId,
             webUi.scheme,
@@ -619,10 +639,7 @@ private[deploy] class Worker(
             executorDir,
             workerUri,
             conf,
-            appLocalDirs,
-            ExecutorState.LAUNCHING,
-            rpId,
-            resources_)
+            appLocalDirs, ExecutorState.RUNNING)
           executors(appId + "/" + execId) = manager
           manager.start()
           coresUsed += cores_
@@ -640,7 +657,11 @@ private[deploy] class Worker(
         }
       }
 
-    case executorStateChanged: ExecutorStateChanged =>
+    case ScaleExecutor(appId, execId, cores_) =>
+      logInfo("Asked to scale executor %s/%s".format(appId, execId))
+      onScaleExecutor(appId, execId, cores_)
+
+    case executorStateChanged @ ExecutorStateChanged(appId, execId, state, message, exitStatus) =>
       handleExecutorStateChanged(executorStateChanged)
 
     case KillExecutor(masterUrl, appId, execId) =>
@@ -696,23 +717,75 @@ private[deploy] class Worker(
       finishedApps += id
       maybeCleanupApplication(id)
 
-    case DecommissionWorker =>
-      decommissionSelf()
+    case InitControllerExecutor
+      (executorId, stageId, coreMin, coreMax, tasks, deadline, core) =>
+      execIdToProxy(executorId).proxyEndpoint.send(Bind(executorId, stageId.toInt))
+      execIdToStageId(executorId) = stageId.toInt
+      val controllerExecutor = new ControllerExecutor(
+        conf, executorId, deadline, coreMin, coreMax, tasks, core)
+      logInfo("Created ControllerExecutor: %s , %d , %d , %d , %f".format
+      (executorId, stageId, deadline, tasks, core))
+      executorIdToController(executorId) = controllerExecutor
+      controllerExecutor.worker = this
+      execIdToProxy(executorId).totalTask = tasks
+      execIdToProxy(executorId).controllerExecutor = controllerExecutor
+      controllerExecutor.start()
 
-    case WorkerDecommissionSigReceived =>
-      decommissionSelf()
-      // Tell the Master that we are starting decommissioning
-      // so it stops trying to launch executor/driver on us
-      sendToMaster(WorkerDecommissioning(workerId, self))
+    case BindWithTasks(executorId, stageId, tasks) =>
+      execIdToProxy(executorId).proxyEndpoint.send(Bind(executorId, stageId))
+      execIdToProxy(executorId).totalTask = tasks
+
+    case UnBind(executorId, stageId) =>
+      if (execIdToStageId.getOrElse(executorId, -1) == stageId) {
+        execIdToProxy(executorId).proxyEndpoint.send(UnBind(executorId, stageId))
+        execIdToProxy(executorId).totalTask = 0
+      }
+
   }
 
-  override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
-    case RequestWorkerState =>
-      context.reply(WorkerStateResponse(host, port, workerId, executors.values.toList,
-        finishedExecutors.values.toList, drivers.values.toList,
-        finishedDrivers.values.toList, activeMasterUrl, cores, memory,
-        coresUsed, memoryUsed, activeMasterWebUiUrl, resources,
-        resourcesUsed.toMap.map { case (k, v) => (k, v.toResourceInformation)}))
+  def onScaleExecutor(_appId: String, execId: String, coresWanted: Double): Unit = {
+    var appId = _appId
+    if (appId.isEmpty) {
+      appId = executors.values.map(_.appId).toSet.head
+    }
+    try {
+      val cpuquota = math.ceil(coresWanted * CPU_PERIOD).toInt.toString
+      val commandUpdateDocker = Seq("docker", "update",
+        "--cpu-period=" + CPU_PERIOD.toString,
+        "--cpu-quota=" + cpuquota, appId + "." + execId)
+      logDebug(commandUpdateDocker.toString)
+      commandUpdateDocker.run
+      var coreFree = math.round(coresWanted).toInt
+      if (coreFree == 0) coreFree = 1
+      execIdToProxy(execId.toString).proxyEndpoint.send(
+        ExecutorScaled(System.currentTimeMillis(), execId,
+          coresWanted, coreFree))
+      logInfo("Scaled executorId %s  of appId %s to  %f Core".format(execId, appId, coresWanted))
+
+      sendToMaster(ExecutorStateChanged(appId, execId.toInt, ExecutorState.RUNNING, None, None))
+
+    } catch {
+      case e: Exception =>
+        logError(s"Failed to scale executor $appId/$execId ", e)
+        if (executors.contains(appId + "/" + execId)) {
+          executors(appId + "/" + execId).kill()
+          val exitCode = Seq("docker", "stop", appId + "." + execId).!
+          executors -= appId + "/" + execId
+          coresAllocated -= appId + "/" + execId
+        }
+        sendToMaster(ExecutorStateChanged(appId, execId.toInt, ExecutorState.FAILED,
+          Some(e.toString), None))
+    }
+
+
+    def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
+      case RequestWorkerState =>
+        context.reply(WorkerStateResponse(host, port, workerId, executors.values.toList,
+          finishedExecutors.values.toList, drivers.values.toList,
+          finishedDrivers.values.toList, activeMasterUrl, cores, memory,
+          coresUsed, memoryUsed, activeMasterWebUiUrl, resources,
+          resourcesUsed.toMap.map { case (k, v) => (k, v.toResourceInformation) }))
+    }
   }
 
   override def onDisconnected(remoteAddress: RpcAddress): Unit = {

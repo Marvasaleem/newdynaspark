@@ -53,6 +53,7 @@ private[spark] class CoarseGrainedExecutorBackend(
     bindAddress: String,
     hostname: String,
     cores: Int,
+    appId: String,
     env: SparkEnv,
     resourcesFileOpt: Option[String],
     resourceProfile: ResourceProfile)
@@ -456,8 +457,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       }
 
       val cfg = driver.askSync[SparkAppConfig](RetrieveSparkAppConfig(arguments.resourceProfileId))
-      val props = cfg.sparkProperties ++ Seq[(String, String)](("spark.app.id", arguments.appId))
-      fetcher.shutdown()
+
 
       // Create SparkEnv using properties we fetched from the driver.
       val driverConf = new SparkConf()
@@ -522,6 +522,9 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
           argv = tail
         case ("--cores") :: value :: tail =>
           cores = value.toInt
+          argv = tail
+        case ("--app-id") :: value :: tail =>
+          appId = value
           argv = tail
         case ("--resourcesFile") :: value :: tail =>
           resourcesFileOpt = Some(value)

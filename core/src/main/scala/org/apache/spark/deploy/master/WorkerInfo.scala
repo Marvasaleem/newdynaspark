@@ -117,7 +117,15 @@ private[spark] class WorkerInfo(
       executors -= exec.fullId
       coresUsed -= exec.cores
       memoryUsed -= exec.memory
-      releaseResources(exec.resources)
+    }
+  }
+
+  def scaleExecutor(exec: ExecutorDesc)
+  {
+    if (executors.contains(exec.fullId)) {
+      coresUsed += exec.cores - executors(exec.fullId).cores
+      memoryUsed += exec.memory - executors(exec.fullId).memory
+      executors(exec.fullId) = exec
     }
   }
 

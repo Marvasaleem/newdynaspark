@@ -234,6 +234,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         }
         makeOffers(executorId)
 
+
+
       case MiscellaneousProcessAdded(time: Long,
           processId: String, info: MiscellaneousProcessDetails) =>
         listenerBus.post(SparkListenerMiscellaneousProcessAdded(time, processId, info))
@@ -242,14 +244,15 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         logError(s"Received unexpected message. ${e}")
     }
 
+
     override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
 
       case RegisterExecutor(executorId, executorRef, hostname, cores, logUrls,
-          attributes, resources, resourceProfileId) =>
+      attributes, resources, resourceProfileId) =>
         if (executorDataMap.contains(executorId)) {
           context.sendFailure(new IllegalStateException(s"Duplicate executor ID: $executorId"))
         } else if (scheduler.excludedNodes.contains(hostname) ||
-            isExecutorExcluded(executorId, hostname)) {
+          isExecutorExcluded(executorId, hostname)) {
           // If the cluster manager gives us an executor on an excluded node (because it
           // already started allocating those resources before we informed it of our exclusion,
           // or if it ignored our exclusion), then we reject that executor immediately.
@@ -260,10 +263,10 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           // If the executor's rpc env is not listening for incoming connections, `hostPort`
           // will be null, and the client connection should be used to contact the executor.
           val executorAddress = if (executorRef.address != null) {
-              executorRef.address
-            } else {
-              context.senderAddress
-            }
+            executorRef.address
+          } else {
+            context.senderAddress
+          }
           logInfo(s"Registered executor $executorRef ($executorAddress) with ID $executorId, " +
             s" ResourceProfileId $resourceProfileId")
           addressToExecutorId(executorAddress) = executorId
@@ -280,16 +283,16 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           val reqTs: Option[Long] = CoarseGrainedSchedulerBackend.this.synchronized {
             execRequestTimes.get(resourceProfileId).flatMap {
               times =>
-              times.headOption.map {
-                h =>
-                // Take off the top element
-                times.dequeue()
-                // If we requested more than one exec reduce the req count by 1 and prepend it back
-                if (h._1 > 1) {
-                  ((h._1 - 1, h._2)) +=: times
+                times.headOption.map {
+                  h =>
+                    // Take off the top element
+                    times.dequeue()
+                    // If we requested more than one exec reduce the req count by 1 and prepend it back
+                    if (h._1 > 1) {
+                      ((h._1 - 1, h._2)) +=: times
+                    }
+                    h._2
                 }
-                h._2
-              }
             }
           }
 
@@ -339,6 +342,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       case RemoveWorker(workerId, host, message) =>
         removeWorker(workerId, host, message)
         context.reply(true)
+
+      case RetrieveSparkProps =>
+        context.reply(sparkProperties)
 
       // Do not change this code without running the K8s integration suites
       case ExecutorDecommissioning(executorId) =>
