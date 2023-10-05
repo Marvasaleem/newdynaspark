@@ -84,7 +84,7 @@ class ControllerProxy
     }
 
     override def receive: PartialFunction[Any, Unit] = {
-      case StatusUpdate(executorId, taskId, state, data, taskCpus, resources) =>
+      case StatusUpdate(executorId, taskId: Long, state, data, taskCpus, resources) =>
         if (state == TaskState.FINISHED) {
           if (controllerExecutor != null) controllerExecutor.completedTasks += 1
           taskCompleted += 1
@@ -113,12 +113,12 @@ class ControllerProxy
         executorRefMap(
           executorIdToAddress(execId.toString).host).send(RegisterExecutorFailed(message))
 
-      case LaunchTask(taskId, data: SerializableBuffer) =>
+      case LaunchTask(data: SerializableBuffer) =>
         if (taskLaunched == totalTask && taskFailed == 0) {
-          logInfo("Killed TID " + taskId.toString + " EID " + execId.toString)
-          driver.get.send(StatusUpdate(execId.toString, taskId, TaskState.KILLED, data, totalTask))
+          logInfo("Killed TID " + data.toString + " EID " + execId.toString)
+          driver.get.send(StatusUpdate(execId.toString, -1, TaskState.KILLED, data, -1)) // TODO: WARNING TO BE CHECKED
         } else {
-          executorRefMap(executorIdToAddress(execId.toString).host).send(LaunchTask(taskId, data))
+          executorRefMap(executorIdToAddress(execId.toString).host).send(LaunchTask(data))
           taskLaunched += 1
           if (taskFailed > 0) taskFailed -= 1
           if (taskLaunched == totalTask) {

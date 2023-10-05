@@ -178,7 +178,7 @@ private[spark] class CoarseGrainedExecutorBackend(
           exitExecutor(1, "Unable to create executor due to " + e.getMessage, e)
       }
 
-    case LaunchTask(taskId, data) =>
+    case LaunchTask(data) =>
       if (executor == null) {
         exitExecutor(1, "Received LaunchTask command but executor was null")
       } else {

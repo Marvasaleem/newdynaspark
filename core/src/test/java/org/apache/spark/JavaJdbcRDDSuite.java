@@ -16,14 +16,6 @@
  */
 package org.apache.spark;
 
-import java.io.Serializable;
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.PreparedStatement;
-import java.sql.SQLException;
-import java.sql.Statement;
-import java.util.UUID;
-
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.rdd.JdbcRDD;
@@ -32,9 +24,13 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.io.Serializable;
+import java.sql.*;
+import java.util.UUID;
+
 public class JavaJdbcRDDSuite implements Serializable {
   private String dbName = "db_" + UUID.randomUUID().toString().replace('-', '_');
-  private transient JavaSparkContext sc;
+  private transient JavaSparkContext sc = new JavaSparkContext("local", "JavaAPISuite");
 
   @Before
   public void setUp() throws ClassNotFoundException, SQLException {

@@ -219,6 +219,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         }
         makeOffers(executorId)
 
+
       case MiscellaneousProcessAdded(time: Long,
           processId: String, info: MiscellaneousProcessDetails) =>
         listenerBus.post(SparkListenerMiscellaneousProcessAdded(time, processId, info))
@@ -423,7 +424,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
             s"${executorData.executorHost}.")
 
           executorData.executorEndpoint.send(
-            LaunchTask(task.taskId ,new SerializableBuffer(serializedTask)))
+            LaunchTask(new SerializableBuffer(serializedTask)))
         }
       }
     }

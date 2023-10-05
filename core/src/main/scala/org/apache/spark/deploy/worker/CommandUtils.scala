@@ -66,6 +66,13 @@ object CommandUtils extends Logging {
     // fails to kill a process tree on Windows
     val cmd = new WorkerCommandBuilder(sparkHome, memory, command).buildCommand()
     (cmd.asScala ++ Seq(command.mainClass) ++ command.arguments).toSeq
+    val app_id = command.arguments(command.arguments.indexOf("--app-id") + 1)
+    val executor_id = command.arguments(command.arguments.indexOf("--executor-id") + 1)
+    val docker_cmd = Seq("docker", "run", "-P", "--net=host", "-v", "/tmp:/tmp", "-v", "/usr/local/spark/conf:/usr/local/spark/conf")
+    val docker_resource = Seq("-m", s"${memory + 10240}m", s"--cpu-period=${cpuperiod}", s"--cpu-quota=${cpuquota}")
+    val docker_name = Seq("--name=" + app_id + "." + executor_id)
+    val docker_image_name = Seq("elfolink/spark:2.0")
+    docker_cmd ++ docker_resource ++ docker_name ++ docker_image_name ++ cmd.asScala ++ Seq(command.mainClass) ++ command.arguments
   }
 
   /**

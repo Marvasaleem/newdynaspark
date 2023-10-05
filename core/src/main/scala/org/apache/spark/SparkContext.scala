@@ -24,6 +24,7 @@ import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap}
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicReference}
 import javax.ws.rs.core.UriBuilder
 import scala.collection.JavaConverters._
+
 import scala.collection.Map
 import scala.collection.concurrent.{Map => ScalaConcurrentMap}
 import scala.collection.immutable
@@ -31,6 +32,7 @@ import scala.collection.mutable.HashMap
 import scala.language.implicitConversions
 import scala.reflect.{ClassTag, classTag}
 import scala.util.control.NonFatal
+
 import com.google.common.collect.MapMaker
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
